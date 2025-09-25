@@ -561,6 +561,15 @@ def is_rocm_platform() -> bool:
         return False
 
 
+def is_musa_platform() -> bool:
+    if is_torch_available():
+        import torch
+
+        return getattr(torch.version, "musa", None) is not None
+    else:
+        return False
+
+
 def is_mamba_ssm_available() -> Union[tuple[bool, str], bool]:
     if is_torch_available():
         import torch
@@ -1625,6 +1634,10 @@ def is_mistral_common_available() -> Union[tuple[bool, str], bool]:
 
 
 def check_torch_load_is_safe() -> None:
+    if is_musa_platform():
+        # MUSA currently supported PyTorch version is 2.5:
+        return
+
     if not is_torch_greater_or_equal("2.6"):
         raise ValueError(
             "Due to a serious vulnerability issue in `torch.load`, even with `weights_only=True`, we now require users "

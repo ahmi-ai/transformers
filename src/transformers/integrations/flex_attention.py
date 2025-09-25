@@ -32,7 +32,7 @@ import torch
 from packaging import version
 
 from ..utils import is_torch_flex_attn_available, logging
-from ..utils.import_utils import _torch_version, is_torch_less_or_equal, is_torchdynamo_compiling
+from ..utils.import_utils import _torch_version, is_torch_less_or_equal, is_torchdynamo_compiling, is_musa_platform
 
 
 if is_torch_flex_attn_available():
@@ -65,6 +65,12 @@ class WrappedFlexAttention:
         """
         if not self._is_flex_compiled or training != self.training:
             self.training = training
+
+            if is_musa_platform():
+                self._compiled_flex_attention = flex_attention
+                self._is_flex_compiled = True
+                return
+
             if is_torch_less_or_equal("2.5.1"):
                 self._compiled_flex_attention = torch.compile(flex_attention, dynamic=False)
             # In PyTorch 2.6.0, there's a known issue with flex attention compilation which may
