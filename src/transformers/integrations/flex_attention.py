@@ -67,7 +67,8 @@ class WrappedFlexAttention:
             self.training = training
 
             if is_musa_platform():
-                self._compiled_flex_attention = flex_attention
+                self._compiled_flex_attention = torch.compile(
+                    flex_attention, mode="max-autotune", fullgraph=True)
                 self._is_flex_compiled = True
                 return
 
