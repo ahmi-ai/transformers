@@ -88,6 +88,9 @@ class EfficientNetEmbeddings(nn.Module):
         self.activation = ACT2FN[config.hidden_act]
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        if isinstance(pixel_values, dict):
+            pixel_values = pixel_values["pixel_values"]
+
         features = self.padding(pixel_values)
         features = self.convolution(features)
         features = self.batchnorm(features)
