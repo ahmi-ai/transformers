@@ -67,8 +67,20 @@ class WrappedFlexAttention:
             self.training = training
 
             if is_musa_platform():
-                self._compiled_flex_attention = torch.compile(
-                    flex_attention, mode="max-autotune", fullgraph=True)
+                __compiled_flex_attention = torch.compile(
+                    flex_attention, backend="inductor",
+                    mode="max-autotune", fullgraph=True
+                )
+                def compiled_flex_attention(*args, **kwargs):
+                    kernel_options = kwargs.pop("kernel_options") or {}
+                    # FIXME: due to bug in triton_musa, flex decoding kernel will
+                    # cause triton compile errors, for now we just use flex attention
+                    kernel_options["FORCE_USE_FLEX_ATTENTION"] = \
+                        kernel_options.get("FORCE_USE_FLEX_ATTENTION", True)
+                    kwargs["kernel_options"] = kernel_options
+                    return __compiled_flex_attention(*args, **kwargs)
+
+                self._compiled_flex_attention = compiled_flex_attention
                 self._is_flex_compiled = True
                 return
 
