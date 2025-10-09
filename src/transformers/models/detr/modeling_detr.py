@@ -25,7 +25,7 @@ from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, ALL_ATTENTION_FUNCTIONS
 from ...utils import (
     ModelOutput,
     auto_docstring,
@@ -423,12 +423,15 @@ class DetrAttention(nn.Module):
         num_heads: int,
         dropout: float = 0.0,
         bias: bool = True,
+        config: Optional[DetrConfig] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
+        self.config = config
+
         if self.head_dim * num_heads != self.embed_dim:
             raise ValueError(
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
@@ -483,6 +486,32 @@ class DetrAttention(nn.Module):
             # self_attention
             key_states = self._shape(self.k_proj(hidden_states), -1, batch_size)
             value_states = self._shape(self.v_proj(hidden_states_original), -1, batch_size)
+
+        """ Use the registered attention interface """
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            q_input_shape = (batch_size, target_len, -1, self.head_dim)
+            query_states = query_states.view(*q_input_shape)
+            query_states = query_states.transpose(1, 2).contiguous()
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask,
+                dropout=0.0 if not self.training else self.dropout,
+                scaling=self.scaling,
+                output_attentions=output_attentions,
+            )
+
+            attn_output = attn_output.view(batch_size, self.num_heads, target_len, self.head_dim)
+            attn_output = attn_output.transpose(1, 2)
+            attn_output = attn_output.reshape(batch_size, target_len, embed_dim)
+
+            attn_output = self.out_proj(attn_output)
+
+            return attn_output, attn_weights
+        """ Use the registered attention interface """
 
         proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, target_len, batch_size).view(*proj_shape)
@@ -551,6 +580,7 @@ class DetrEncoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
+            config=config,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -623,6 +653,7 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
+            config=config,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -633,6 +664,7 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
+            config=config,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
