@@ -69,7 +69,7 @@ class WrappedFlexAttention:
             if is_musa_platform():
                 __compiled_flex_attention = torch.compile(
                     flex_attention, backend="inductor",
-                    mode="max-autotune", fullgraph=True
+                    mode="max-autotune", fullgraph=True, dynamic=False
                 )
                 def compiled_flex_attention(*args, **kwargs):
                     kernel_options = kwargs.pop("kernel_options") or {}
