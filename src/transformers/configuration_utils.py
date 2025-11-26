@@ -1160,7 +1160,7 @@ class PreTrainedConfig(PushToHubMixin):
             config_to_return = self
 
         # handle legacy models with flat config structure, when we only want one of the configs
-        if not return_both and len(valid_text_config_names) == 0 and config_to_return.is_encoder_decoder:
+        if not return_both and len(valid_text_config_names) == 0 and getattr(config_to_return, "is_encoder_decoder", False):
             config_to_return = copy.deepcopy(config_to_return)
             prefix_to_discard = "encoder" if decoder else "decoder"
             prefix_to_keep = "decoder" if decoder else "encoder"
