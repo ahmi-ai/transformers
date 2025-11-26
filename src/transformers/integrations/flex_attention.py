@@ -32,7 +32,7 @@ import torch
 from packaging import version
 
 from ..utils import is_torch_flex_attn_available, logging
-from ..utils.import_utils import get_torch_version, is_torch_less_or_equal, is_torchdynamo_compiling
+from ..utils.import_utils import get_torch_version, is_torch_less_or_equal, is_torchdynamo_compiling, is_torch_musa_available
 
 
 if is_torch_flex_attn_available():
@@ -65,6 +65,25 @@ class WrappedFlexAttention:
         """
         if not self._is_flex_compiled or training != self.training:
             self.training = training
+
+            if is_torch_musa_available():
+                __compiled_flex_attention = torch.compile(
+                    flex_attention, backend="inductor",
+                    mode="max-autotune", fullgraph=True, dynamic=False
+                )
+                def compiled_flex_attention(*args, **kwargs):
+                    kernel_options = kwargs.pop("kernel_options") or {}
+                    # FIXME: due to bug in triton_musa, flex decoding kernel will
+                    # cause triton compile errors, for now we just use flex attention
+                    kernel_options["FORCE_USE_FLEX_ATTENTION"] = \
+                        kernel_options.get("FORCE_USE_FLEX_ATTENTION", True)
+                    kwargs["kernel_options"] = kernel_options
+                    return __compiled_flex_attention(*args, **kwargs)
+
+                self._compiled_flex_attention = compiled_flex_attention
+                self._is_flex_compiled = True
+                return
+
             if is_torch_less_or_equal("2.5.1"):
                 self._compiled_flex_attention = torch.compile(flex_attention, dynamic=False)
             # In PyTorch 2.6.0, there's a known issue with flex attention compilation which may
