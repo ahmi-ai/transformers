@@ -1187,6 +1187,9 @@ def is_opentelemetry_available() -> bool:
 
 
 def check_torch_load_is_safe() -> None:
+    if is_torch_musa_available():
+        return
+
     if not is_torch_greater_or_equal("2.6"):
         raise ValueError(
             "Due to a serious vulnerability issue in `torch.load`, even with `weights_only=True`, we now require users "
