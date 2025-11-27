@@ -31,7 +31,7 @@ from typing import Any, Optional, TypedDict
 import numpy as np
 
 from ..utils import logging
-from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, requires
+from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, requires, is_torch_greater_or_equal
 
 
 _CAN_RECORD_REGISTRY = {}
@@ -805,11 +805,14 @@ def check_model_inputs(tie_last_hidden_states=True):
             is needed for some vision models (e.g. CLIP, SigLIP)
     """
 
+    is_torch_before_27 = not is_torch_greater_or_equal("2.7")
+
     def wrapped_fn(func):
         @wraps(func)
         def wrapper(self, *args, **kwargs):
             use_cache_arg_index = None
-            if "use_cache" in func.__code__.co_varnames:
+            if (is_torch_before_27 and not torch._dynamo.is_compiling()) \
+                and "use_cache" in func.__code__.co_varnames:
                 use_cache_arg_index = func.__code__.co_varnames.index("use_cache") - 1  # -1 for self
 
             if (
