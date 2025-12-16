@@ -31,7 +31,7 @@ from typing import Any, Optional, TypedDict
 import numpy as np
 
 from ..utils import logging
-from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, requires, is_torch_greater_or_equal
+from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, requires, is_torch_greater_or_equal, is_torch_musa_available
 
 
 _CAN_RECORD_REGISTRY = {}
@@ -88,6 +88,10 @@ def _get_frameworks_and_test_func(x):
         "np": is_numpy_array,
         "mlx": is_mlx_array,
     }
+
+    if is_torch_musa_available():
+        del framework_to_test["mlx"]
+
     preferred_framework = infer_framework_from_repr(x)
     # We will test this one first, then numpy, then the others.
     frameworks = [] if preferred_framework is None else [preferred_framework]
