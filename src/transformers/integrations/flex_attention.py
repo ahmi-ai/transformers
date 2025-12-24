@@ -67,19 +67,10 @@ class WrappedFlexAttention:
             self.training = training
 
             if is_torch_musa_available():
-                __compiled_flex_attention = torch.compile(
+                self._compiled_flex_attention = torch.compile(
                     flex_attention, backend="inductor",
                     mode="max-autotune", fullgraph=True, dynamic=False
                 )
-                def compiled_flex_attention(*args, **kwargs):
-                    kernel_options = kwargs.pop("kernel_options") or {}
-                    # force to use flex_attention instead of flex_decoding:
-                    # kernel_options["FORCE_USE_FLEX_ATTENTION"] = \
-                    #     kernel_options.get("FORCE_USE_FLEX_ATTENTION", True)
-                    kwargs["kernel_options"] = kernel_options
-                    return __compiled_flex_attention(*args, **kwargs)
-
-                self._compiled_flex_attention = compiled_flex_attention
                 self._is_flex_compiled = True
                 return
 
@@ -296,7 +287,11 @@ def flex_attention_forward(
         value = repeat_kv(value, query.shape[1] // value.shape[1])
         enable_gqa = False
 
-    kernel_options = kwargs.get("kernel_options")
+    kernel_options = kwargs.get("kernel_options", {})
+    # force to use flex_attention instead of flex_decoding:
+    # kernel_options["FORCE_USE_FLEX_ATTENTION"] = \
+    #     kernel_options.get("FORCE_USE_FLEX_ATTENTION", True)
+
     # On CPU we must skip returning LSE due to a runtime issue; elsewhere, follow PyTorch API and return it
     return_lse = query.device.type != "cpu"
 
